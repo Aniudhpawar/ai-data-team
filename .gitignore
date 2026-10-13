@@ -1,0 +1,10 @@
+.venv/
+.env
+LEARNING_NOTES.md
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+data/*.csv
+
+notes/
+*~
