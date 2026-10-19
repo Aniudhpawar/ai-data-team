@@ -8,3 +8,4 @@ data/*.csv
 
 notes/
 *~
+notebooks/00_smoke_test.ipynb
