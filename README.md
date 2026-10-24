@@ -1,6 +1,6 @@
 # AI Data Team
 
-Ask a business question in plain English and get a plain-English answer backed by SQL on real tables. A small team of AI agents plans the work, writes the SQL, checks it, and explains the result. It runs on Databricks Free Edition with Databricks-hosted models, so there are no API costs.
+Ask a business question and get a plain-English answer backed by SQL on real tables. A small team of AI agents plans the work, writes the SQL, checks it, and explains the result. It runs on Databricks Free Edition with Databricks-hosted models, so there are no API costs.
 
 ## Example
 
