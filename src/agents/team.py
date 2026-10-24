@@ -3,7 +3,7 @@ import re
 from .db import query
 from .guard import clean_sql
 from .llm import llm
-from .prompts import data_notes, sql_system
+from .prompts import data_notes, schema_text, sql_system
 
 
 def plan(question):
@@ -23,9 +23,12 @@ def plan(question):
     except Exception:
         return [question]
 
-def analyst(subq, feedback=None):
-    q = subq if not feedback else (
-        f"{subq}\nA reviewer rejected your previous SQL: {feedback}. Fix it.")
+
+def analyst(subq, feedback=None, prev_sql=None):
+    q = subq
+    if feedback:
+        q = (f"{subq}\nYour previous SQL was:\n{prev_sql or '(none)'}\n"
+             f"It was rejected: {feedback}\nWrite a corrected query.")
     sql = clean_sql(llm(sql_system(), q))
     names, rows = query(f"SELECT * FROM ({sql}) LIMIT 200")
     return sql, names, rows
@@ -34,9 +37,11 @@ def analyst(subq, feedback=None):
 def reviewer(subq, sql, names, rows):
     return llm(
         "You review SQL written for a data analyst. Reply FIX only if the SQL breaks one of "
-        "these rules or fails to answer the question (wrong period, wrong metric, wrong grouping). "
+        "these rules, uses a column or table that does not exist, or fails to answer the "
+        "question (wrong period, wrong metric, wrong grouping). "
         "Extra columns are fine and are NOT a reason to reject.\n"
-        f"{data_notes()}\nReply with exactly 'OK' or 'FIX: <one sentence>'.",
+        f"Available tables and columns:\n{schema_text()}\n"
+        f"Rules:{data_notes()}\nReply with exactly 'OK' or 'FIX: <one sentence>'.",
         f"Question: {subq}\nSQL: {sql}\nColumns: {names}\nFirst rows: {rows[:5]}",
         max_tokens=100).strip()
 
@@ -47,27 +52,27 @@ def team(question):
     print("PLANNER ->", subs, "\n")
     findings = []
     for sq in subs:
-        feedback = None
-        for attempt in range(2):
+        feedback, prev_sql = None, None
+        for attempt in range(3):
             try:
-                sql, names, rows = analyst(sq, feedback)
+                sql, names, rows = analyst(sq, feedback, prev_sql)
             except Exception as e:
                 feedback = f"query failed: {str(e)[:200]}"
                 print(f"ANALYST (try {attempt + 1}) failed: {feedback}")
                 continue
             verdict = reviewer(sq, sql, names, rows)
             print(f"ANALYST  -> {sq}\n  SQL: {' '.join(sql.split())}\nREVIEWER -> {verdict}\n")
-            if verdict.upper().startswith("OK") or attempt == 1:
+            if verdict.upper().startswith("OK") or attempt == 2:
                 findings.append({"question": sq, "columns": names,
                                  "rows": rows[:20], "reviewer": verdict})
                 break
-            feedback = verdict
+            feedback, prev_sql = verdict, sql
     return llm(
         "You are the writer on a data team, explaining findings to a non-technical business "
         "client. Use plain English, lead with the answer, always state the time period, quote "
-        "key numbers in USD, and give percentage changes when comparing periods. Keep it under "
-        "150 words and never invent numbers that are not in the findings. If a finding was not "
-        "approved by the reviewer, say it is less certain.",
+        "key numbers in USD, and give percentage changes when comparing periods. "
+        "Copy every dollar amount exactly as it appears in the findings; never round, rescale "
+        "or move a decimal point. Keep it under 150 words and never invent numbers that are "
+        "not in the findings. If a finding was not approved by the reviewer, say it is less certain.",
         f"Client question: {question}\nFindings: {json.dumps(findings, default=str)}\n"
         f"Data notes: {data_notes()}", max_tokens=500)
-
