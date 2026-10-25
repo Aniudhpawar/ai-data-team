@@ -40,3 +40,4 @@ Tables:
 {schema_text()}
 Notes:{data_notes()}
 Return ONLY one SELECT query, no explanation, no markdown."""
+
