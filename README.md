@@ -53,6 +53,10 @@ tests/       unit tests for the SQL safety guard
 - **Planner wrote SQL:** it invented table and column names. It now writes plain-English sub-questions only.
 - **Half-answered questions:** the planner skipped the overall total. It now asks for both the total and the breakdown.
 - **Over-strict reviewer:** it rejected valid SQL for extra columns. It now rejects only wrong period, metric or grouping.
+- **Unstable answers on multi-step questions:** "deepest drop per year" gave different answers on every run. Causes: a prompt rule that forced `LIMIT 3`, no worked example, and the analyst not seeing its own rejected SQL on retry. Fixed by adding a worked SQL example, passing the previous SQL back on retry, and giving the reviewer the schema.
+- **Writer misplacing decimals:** amounts came out 10x too big. Fixed with an explicit "copy numbers exactly" rule.
+- **Model comparison:** tested four hosted models against a plain-SQL ground truth. Llama 3.3 70B and Llama 4 Maverick matched exactly. Qwen3 skipped the per-year breakdown. gpt-oss returned an empty answer.
+- **Regression test:** a live test checks the agent's answer against ground-truth numbers (`RUN_LIVE=1 python -m pytest`).
 
 ## Data limitations
 
