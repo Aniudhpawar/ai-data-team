@@ -7,17 +7,10 @@ from .db import query
 def data_notes():
     latest = query(f"SELECT MAX(order_date) FROM {C}.{S}.clean_orders")[1][0][0]
     return f"""
-- Amounts are in USD. Revenue ALWAYS means SUM(total_amount_usd) from clean_orders. Never use subtotal_usd for revenue.
-- Use clean_orders for revenue and order counts. Use order_date for anything over time.
-- Do NOT use registration_date for tenure or signup cohorts: most orders predate it (data quirk).
-- clean_monthly_revenue and clean_product_summary are pre-aggregated; prefer clean_orders for custom cuts.
-- The latest order in the data is {latest}. For relative periods ("last 12 months", "this year", "recently"), anchor to {latest}, never CURRENT_DATE. Example: last 12 months = order_date > DATE_ADD('{latest}', -365).
-- When the question gives explicit years or dates, use exactly those.
-- Only for "best seller" questions: rank by SUM(quantity) and also return SUM(total_amount_usd). For every other question, sort by the metric asked about and return only the columns needed.
-- For "top" questions return the number of rows asked for; if no number is given, return 5.
-- For "change", "growth" or "compare" questions between two periods, return one row per group with a column per period plus the difference. Order by ABS(difference) DESC and return the top 3.
-- For month-over-month questions, first total revenue by year and month, then use LAG(revenue) OVER (ORDER BY year, month) with NO PARTITION BY, so January is compared with the previous December. "Deepest drop" means the most negative change. For per-year results, rank inside each year with ROW_NUMBER() OVER (PARTITION BY year ORDER BY change ASC) in a separate step and keep row 1. Never use LIMIT for per-year results.
-- Example, deepest month-over-month drop per year: WITH m AS (SELECT year, month, SUM(total_amount_usd) AS revenue FROM workspace.ai_data_team.clean_orders GROUP BY year, month), d AS (SELECT year, month, revenue, revenue - LAG(revenue) OVER (ORDER BY year, month) AS change FROM m), r AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY year ORDER BY change ASC) AS rn FROM d WHERE change < 0) SELECT year, month, revenue, change FROM r WHERE rn = 1 ORDER BY year
+- Always ROUND money to 2 decimals and percentages to 1 decimal in SQL.
+- If a question mentions two dimensions (for example months and products), answer it in ONE query so each product is tied to its month. Month alone is ambiguous across years, so always include year.
+- "Top products in the top months": rank months by revenue, keep the top 5 (or N asked), then take the top product within each of those months. Never return more than 10 rows for such questions. Example: WITH m AS (SELECT year, month, SUM(total_amount_usd) AS month_revenue FROM workspace.ai_data_team.clean_orders GROUP BY year, month), top_m AS (SELECT * FROM m ORDER BY month_revenue DESC LIMIT 5), p AS (SELECT year, month, product_name, SUM(total_amount_usd) AS product_revenue, ROW_NUMBER() OVER (PARTITION BY year, month ORDER BY SUM(total_amount_usd) DESC) AS rn FROM workspace.ai_data_team.clean_orders GROUP BY year, month, product_name) SELECT t.year, t.month, ROUND(t.month_revenue, 2) AS month_revenue, p.product_name, ROUND(p.product_revenue, 2) AS product_revenue FROM top_m t JOIN p ON t.year = p.year AND t.month = p.month WHERE p.rn = 1 ORDER BY t.month_revenue DESC
+- If the question does not give a time period, use all data and say so.
 """
 
 
