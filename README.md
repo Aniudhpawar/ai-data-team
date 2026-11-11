@@ -29,13 +29,52 @@ Four sample e-commerce tables (customers, orders, monthly revenue, product summa
 
 Python, SQL, Databricks (Free Edition, SQL warehouse and hosted LLM `databricks-meta-llama-3-3-70b-instruct`), VS Code, GitHub, pytest.
 
+## Website
+
+A black-and-white site (`web/`) served by a FastAPI backend (`src/api/`). It has four pages: an overview, a dashboard (with an INR/USD switch), a chat with the agent team that shows every step and the SQL behind each answer, and a pipeline page with live data-quality checks.
+
+```
+uvicorn src.api.main:app --reload     # then open http://localhost:8000
+```
+
+### Three ways to run it
+
+| Mode | Data | Model | Needs |
+|---|---|---|---|
+| **Local test** (default without credentials) | DuckDB over `data/raw` | scripted mock, answers a few question types with real SQL | nothing |
+| **Local data, real model** | DuckDB | `LLM_BACKEND=databricks` or `anthropic` | a token or API key |
+| **Full Databricks** (default with credentials in `.env`) | Databricks SQL warehouse | Databricks-hosted Llama | Databricks Free Edition |
+
+Copy `.env.example` to `.env` to choose. Local mode builds the same `clean_*` tables as notebook 03 and translates the agents' Databricks SQL to DuckDB with sqlglot, so the agent code is unchanged. The local tables reproduce the ground-truth numbers in `tests/test_live_answers.py`.
+
+### API
+
+| Route | Purpose |
+|---|---|
+| `GET /api/health` | active backends, suggested questions, questions left today |
+| `GET /api/dashboard` | KPIs and chart data from the clean tables |
+| `GET /api/quality` | table sizes and the notebook 03 quality checks |
+| `POST /api/ask` | streams the agent steps, then the answer, SQL, rows and a chart |
+
+Protection for a public deployment: a per-visitor rate limit, a daily question cap, a question length limit and an answer cache (`.env.example` lists the settings).
+
+### Tests
+
+```
+python -m pytest -q                 # local data and mock model, no account needed
+RUN_LIVE=1 python -m pytest -q      # adds the live Databricks check
+```
+
 ## Project layout
 
 ```
 notebooks/   data upload, table creation, cleaning, agent demos
 src/agents/  config, db, llm, guard (SQL safety), prompts, team (the agents)
+src/agents/  also: local_db (DuckDB mode), mock_llm, charts
+src/api/     FastAPI backend: dashboard, quality checks, streamed answers, limits
+web/         the website
 src/cli.py   ask a question from the terminal
-tests/       unit tests for the SQL safety guard
+tests/       unit tests: SQL safety guard, local data, charts, agent team, API
 ```
 
 ## Run it
@@ -53,6 +92,10 @@ tests/       unit tests for the SQL safety guard
 - **Planner wrote SQL:** it invented table and column names. It now writes plain-English sub-questions only.
 - **Half-answered questions:** the planner skipped the overall total. It now asks for both the total and the breakdown.
 - **Over-strict reviewer:** it rejected valid SQL for extra columns. It now rejects only wrong period, metric or grouping.
+- **Unstable answers on multi-step questions:** "deepest drop per year" gave different answers on every run. Causes: a prompt rule that forced `LIMIT 3`, no worked example, and the analyst not seeing its own rejected SQL on retry. Fixed by adding a worked SQL example, passing the previous SQL back on retry, and giving the reviewer the schema.
+- **Writer misplacing decimals:** amounts came out 10x too big. Fixed with an explicit "copy numbers exactly" rule.
+- **Model comparison:** tested four hosted models against a plain-SQL ground truth. Llama 3.3 70B and Llama 4 Maverick matched exactly. Qwen3 skipped the per-year breakdown. gpt-oss returned an empty answer.
+- **Regression test:** a live test checks the agent's answer against ground-truth numbers (`RUN_LIVE=1 python -m pytest`).
 
 ## Data limitations
 

@@ -1,10 +1,10 @@
 from functools import lru_cache
-from databricks.sdk import WorkspaceClient
-from . import config  # noqa: F401  (loads .env)
+from . import config
 
 
 @lru_cache(maxsize=1)
 def client():
+    from databricks.sdk import WorkspaceClient
     return WorkspaceClient()
 
 
@@ -14,7 +14,10 @@ def _warehouse_id():
 
 
 def query(sql):
-    """Run SQL on Databricks. Returns (column_names, rows)."""
+    """Run SQL. Returns (column_names, rows). Databricks by default, DuckDB when DATA_BACKEND=local."""
+    if config.DATA_BACKEND == "local":
+        from . import local_db
+        return local_db.query(sql)
     r = client().statement_execution.execute_statement(
         statement=sql, warehouse_id=_warehouse_id(), wait_timeout="50s")
     if r.status.state.value != "SUCCEEDED":
